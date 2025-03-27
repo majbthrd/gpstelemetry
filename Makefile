@@ -9,7 +9,7 @@ ifneq ($(OS),Windows_NT)
 endif
 
 gpstelemetry : gpstelemetry.o GPMF_parser.o GPMF_utils.o GPMF_mp4reader.o
-		gcc -o $@ gpstelemetry.o GPMF_parser.o GPMF_utils.o GPMF_mp4reader.o $(ASAN_FLAGS)
+		gcc -o $@ gpstelemetry.o GPMF_parser.o GPMF_utils.o GPMF_mp4reader.o $(ASAN_FLAGS) -lm
 
 gpstelemetry.o : gpstelemetry.c
 		gcc -g -c gpstelemetry.c

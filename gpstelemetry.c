@@ -21,6 +21,8 @@ Place - Suite 330, Boston, MA 02111-1307, USA.
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <stdbool.h>
+#include <math.h>
 
 #include "./gpmf-parser/GPMF_parser.h"
 #include "./gpmf-parser/demo/GPMF_mp4reader.h"
@@ -38,11 +40,25 @@ static const char *const column_names[] =
 	"fix","precision",
 };
 
+static const int gps9_indexes[] =
+{
+	0, /* lat */
+	1, /* long */
+	2, /* alt */
+	3, /* 2D speed */
+	4, /* 3D speed */
+	8, /* fix */
+	7, /* precision */
+};
+
 int main(int argc, char* argv[])
 {
 	GPMF_ERR ret = GPMF_OK;
 	GPMF_stream metadata_stream, *ms = &metadata_stream;
 	double file_start = 0.0;
+	time_t gps9_epoch;
+	struct tm tm;
+	bool use_gps9 = false;
 
 	if (argc < 2)
 	{
@@ -50,6 +66,10 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	memset(&tm, 0, sizeof(tm));
+	tm.tm_year = 100;
+	gps9_epoch = timegm(&tm);
+	
 	for (int argc_index = 1; argc_index < argc; argc_index++)
 	{
 		char *mp4filename = argv[argc_index];
@@ -126,6 +146,8 @@ int main(int argc, char* argv[])
 					res = GPMF_FormattedData(ms, tmpbuffer, buffersize, 0, samples);
 				else if (STR2FOURCC("GPS5") == key)
 					res = GPMF_ScaledData(ms, tmpbuffer, buffersize, 0, samples, GPMF_TYPE_DOUBLE);
+				else if (STR2FOURCC("GPS9") == key)
+					res = GPMF_ScaledData(ms, tmpbuffer, buffersize, 0, samples, GPMF_TYPE_DOUBLE);
 
 				if (GPMF_OK == res)
 				{
@@ -155,7 +177,7 @@ int main(int argc, char* argv[])
 							gpsu.time         = timegm(&tm);
 							gpsu.milliseconds = 100.0 * (gpsu_string[13] - '0') + 10.0 * (gpsu_string[14] - '0') + (gpsu_string[15] - '0');
 						}
-						else if (STR2FOURCC("GPS5") == key)
+						else if ( (STR2FOURCC("GPS5") == key) && !use_gps9 )
 						{
 							/* at this point, we should have all the data (with "GPS5" being at the highest sample rate) */
 
@@ -174,6 +196,33 @@ int main(int argc, char* argv[])
 							the time increment potentially rolls over into the next minute, hour, or even day
 							storing the second data in time_t makes our job much easier as strftime() above handles this
 							*/
+							now += step; gpsu.milliseconds += step * 1000.0;
+							if (gpsu.milliseconds >= 1000.0)
+							{
+								gpsu.milliseconds -= 1000.0;
+								gpsu.time++;
+							}
+						}
+						else if (STR2FOURCC("GPS9") == key)
+						{
+							use_gps9 = true;
+
+							/* we print the time... */
+							printf("%f, ", (file_start + now) * 1000.0);
+							char ftimestr[64];
+							if (0.0 == now)
+							{
+								gpsu.time = gps9_epoch + /* days since 2000 */ ((time_t)ptr[5] + 1) * /* secs per day */ 86400;
+								double sub_secs = fmod(ptr[6], 1.0);
+								gpsu.milliseconds = (int)(1000.0 * sub_secs);
+								gpsu.time += (time_t)(ptr[6] - sub_secs);
+							}
+							strftime(ftimestr, sizeof(ftimestr), "%Y-%m-%dT%H:%M:%S", gmtime(&gpsu.time));
+							printf("%s.%03dZ", ftimestr, (int)gpsu.milliseconds);
+							for (uint32_t j = 0; j < (sizeof(gps9_indexes) / sizeof(*gps9_indexes)); j++)
+								printf(", %.6f", ptr[gps9_indexes[j]]);
+							printf("\n");
+
 							now += step; gpsu.milliseconds += step * 1000.0;
 							if (gpsu.milliseconds >= 1000.0)
 							{
