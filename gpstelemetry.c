@@ -53,6 +53,20 @@ static const int gps9_indexes[] =
 
 int main(int argc, char* argv[])
 {
+	// Check for help flag
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+			printf("Usage: %s <mp4file> [mp4file_2] ... [mp4file_n]\n", argv[0]);
+			printf("\nDescription:\n");
+			printf("gpstelemetry is a command-line tool to extract GPS telemetry from GoPro videos.\n");
+			printf("\nSample Usage:\n");
+			printf("  gpstelemetry myfile.mp4\n");
+			printf("  gpstelemetry myfile.mp4 > mydata.csv\n");
+			printf("  gpstelemetry GL010009.LRV GL020009.LRV GL030009.LRV > myjourney.csv\n");
+			return 0;
+		}
+	}
+
 	GPMF_ERR ret = GPMF_OK;
 	GPMF_stream metadata_stream, *ms = &metadata_stream;
 	double file_start = 0.0;
